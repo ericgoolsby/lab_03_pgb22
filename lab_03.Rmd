@@ -1,0 +1,434 @@
+---
+title: "Lab Week 3"
+author: "Your Name"
+date: '2022-09-08'
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message = FALSE, warning = FALSE)
+```
+
+## Load data
+
+The following R code chunk loads population-level data from Notes S1 from Mason et al. 2016 (New Phytologist). Because the first two lines of the spreadsheet do not contain data, the argument `skip = 2` ignores the first two lines and loads data starting from line 3. Next, the `janitor::clean_names()` function is used to make column names R-compatible.
+
+- Run the following code chunk by pressing the green triangle located at the top right corner.
+  - If you have never installed these R packages before, you should install them first by running the following in the R console: `install.packages("package name")`.
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(janitor)
+
+data <- read_excel("data/Mason_S1.xlsx", 
+    sheet = "Population_LSMeans", skip = 2) %>% janitor::clean_names()
+```
+
+## Visualizing Data
+
+The following chunks uses the `ggplot2` package to explore the data in different ways.
+
+### Boxplot
+
+The box plot visualizes the median (50th percentile), interquartile range (25th and 75h percentile), lower and upper extremes, and outliers that fall very far outside of the majority of the data. We also replace the y-axis label (trichome_density_number_per_cm2) with `xlab("Trichome density")`.
+
+```{r}
+data %>% 
+  ggplot(mapping = aes(x = trichome_density_number_per_cm2)) + 
+  geom_boxplot() + 
+  xlab("Trichome density") +
+  theme_bw()
+```
+
+A box plot can be plotted vertically by switching `x = ` to `y = ` on the second line of code, but be sure to switch `xlab` to `ylab`:
+
+```{r}
+data %>% 
+  ggplot(mapping = aes(y = trichome_density_number_per_cm2)) + 
+  geom_boxplot() + 
+  ylab("Trichome density") +
+  theme_bw()
+```
+
+This data looks pretty skewed, so perhaps viewing it on a log-scale using `scale_y_log10()` (or `scale_x_log10()` if horizontal) will be better:
+
+```{r}
+data %>% 
+  ggplot(mapping = aes(y = trichome_density_number_per_cm2)) + 
+  geom_boxplot() + 
+  scale_y_log10() +
+  ylab("Trichome density") +
+  theme_bw()
+```
+
+We can also divide the data by group, such as growth form, by adding the `fill` argument to the second line:
+
+```{r}
+data %>% 
+  ggplot(mapping = aes(x = trichome_density_number_per_cm2,fill = growth_form)) + 
+  geom_boxplot() + 
+  xlab("Trichome Density") + 
+  labs(fill = "Growth Form") +
+  scale_x_log10() +
+  theme_bw()
+```
+
+In addition to the box plot, we can view data as a density plot, violin plot, or histogram:
+
+### Density plot
+
+```{r}
+data %>% 
+  ggplot(mapping = aes(x = trichome_density_number_per_cm2,fill = growth_form)) + 
+  geom_density() + 
+  xlab("Trichome Density") + 
+  labs(fill = "Growth Form") +
+  scale_x_log10() +
+  theme_bw()
+```
+
+### Violin plot
+
+The violin plot requires that the group variable be included as an `x` or `y` variable, but we retain `fill = growth_form` for aesthetics.
+
+```{r}
+data %>% 
+  ggplot(mapping = aes(x = trichome_density_number_per_cm2,y = growth_form,fill = growth_form)) + 
+  geom_violin() + 
+  xlab("Trichome Density") + 
+  ylab("Growth Form") +
+  labs(fill = "Growth Form") +
+  scale_x_log10() +
+  theme_bw()
+```
+
+Just remember to update the `scale_y_log10()` and axis labels when switching axes:
+
+```{r}
+data %>% 
+  ggplot(mapping = aes(x = growth_form,y = trichome_density_number_per_cm2,fill = growth_form)) + 
+  geom_violin() + 
+  xlab("Growth Form") +
+  ylab("Trichome Density") + 
+  labs(fill = "Growth Form") +
+  scale_y_log10() +
+  theme_bw()
+```
+
+### Histogram
+
+```{r}
+data %>% 
+  ggplot(mapping = aes(x = trichome_density_number_per_cm2,fill = growth_form)) + 
+  geom_histogram() + 
+  xlab("Trichome Density") + 
+  labs(fill = "Growth Form") +
+  scale_x_log10() +
+  theme_bw()
+```
+
+## Correlations
+
+In Week 1, we used the `plot` function to make a scatterplot to visualize correlations bewteen two variables. Here we use `ggplot` to accomplish the same task.
+
+```{r}
+data %>% ggplot(mapping = 
+                  aes(x = c_n_ratio,
+                      y = tannin_activity_percent_tannic_acid_equivalents_by_mass)) + 
+                  geom_point() + 
+                  theme_bw() + 
+                  xlab("C:N Ratio") + 
+                  ylab("Tannin Activity")
+```
+
+Now let's fit a linear regression with the `lm` function:
+
+```{r}
+tannin_cn.lm <- lm(data$tannin_activity_percent_tannic_acid_equivalents_by_mass ~ data$c_n_ratio)
+
+summary(tannin_cn.lm)
+```
+
+We see the R^2 value is strong (0.61), and the p-value is essentially zero. Recall the assumptions of linear regression: 1) linearity, 2) normality of residuals, and 3) independent and identically distributed residuals are a good place to start. We can see right away from the scatterplot that the relationship does not appear to be exactly linear, but let's plot the data against the linear regression and other diagnostics to see how bad it is. (Side note: we have to enter `TRUE` because normally R prompts you to hit Return to cycle through the plots, but that's not possible when creating an RMarkdown document):
+
+```{r}
+data %>% ggplot(mapping = 
+                  aes(x = c_n_ratio,
+                      y = tannin_activity_percent_tannic_acid_equivalents_by_mass)) + 
+                  geom_point() + 
+                  theme_bw() + 
+                  stat_smooth(method='lm') +
+                  xlab("C:N Ratio") + 
+                  ylab("Tannin Activity")
+
+hist(resid(tannin_cn.lm))
+
+plot(tannin_cn.lm)
+TRUE
+TRUE
+TRUE
+TRUE
+
+```
+
+Often a log-transformation helps nonlinear data, but this data appears to be skewed. A square root transformation can help in cases like this to normalize the data, but it makes the regression slope somewhat uninterpretable. Still, let's try it and see if i improves model assumptions:
+
+```{r}
+data$sqrt_tannins <- sqrt(data$tannin_activity_percent_tannic_acid_equivalents_by_mass)
+data %>% ggplot(mapping = 
+                  aes(x = c_n_ratio,
+                      y = sqrt_tannins)) + 
+                  geom_point() + 
+                  theme_bw() + 
+                  stat_smooth(method='lm') +
+                  xlab("C:N Ratio") + 
+                  ylab("sqrt(Tannin Activity)")
+
+tannin_cn.lm2 <- lm(data$sqrt_tannins ~ data$c_n_ratio)
+
+summary(tannin_cn.lm2)
+```
+
+This looks like it might be better. Let's check the other diagnostics:
+
+```{r}
+hist(resid(tannin_cn.lm2))
+
+plot(tannin_cn.lm2)
+TRUE
+TRUE
+TRUE
+TRUE
+```
+
+It's not perfect, but it's certainly an improvement. Interestingly, the R^2 was essentially unchanged by the transformation.
+
+We can also plot the relationship by growth form using ggplot:
+
+```{r}
+data %>% ggplot(mapping = 
+                  aes(x = c_n_ratio,
+                      y = sqrt_tannins,
+                      color = growth_form)) + 
+        geom_point() + 
+        stat_smooth(method = "lm",alpha = .2) +
+        theme_bw()
+```
+
+It appears that erect perennial sunflowers might invest more in tannin biosynthesis than other sunflowers. 
+
+```{r}
+tannin_cn.lm3 <- lm(data$sqrt_tannins ~ data$c_n_ratio + data$growth_form)
+summary(tannin_cn.lm3)
+
+hist(resid(tannin_cn.lm3))
+
+plot(tannin_cn.lm3)
+TRUE
+TRUE
+TRUE
+TRUE
+```
+
+The model has an even stronger fit to the data (R^2 = 0.69), but we should test whether including growth form gives us a significantly better fit. For this, we can use a likelihood ratio test with the anova function:
+
+```{r}
+anova(tannin_cn.lm2,tannin_cn.lm3)
+```
+
+Note that in this output, Model 1 corresponds to tannin_cn.lm2, and Model 2 corresponds to tannin_cn.lm3 (the model incorporating growth form).
+
+An alternative approach is to compare models using information criteria AIC or BIC. For both metrics, the model with the lowest score is prerred.
+
+```{r}
+AIC(tannin_cn.lm2)
+AIC(tannin_cn.lm3)
+
+BIC(tannin_cn.lm2)
+BIC(tannin_cn.lm3)
+```
+
+AIC and BIC results are consistent with our likelihood ratio test: including growth form gives a signficicantly better fit.
+
+## ANOVA
+
+Now let's return to trichome density. Take a look at the plots at the beginning of the document: it appears there might be a difference in trichome density among different growth forms. We can test this with an ANOVA using the `aov` function:
+
+```{r}
+trichome.aov <- aov(data$trichome_density_number_per_cm2 ~ data$growth_form)
+summary(trichome.aov)
+```
+
+We get a significant result (p<.0001), but we should check to see if our model assumptions are being met. Recall that an ANOVA is simply a linear model, treating groups as predictor variables. We can see this is the case by examining the linear regression p-value at the bottom right of the model summary (it's identical to the ANOVA p-value):
+
+```{r}
+trichome.lm <- lm(data$trichome_density_number_per_cm2 ~ data$growth_form)
+summary(trichome.lm)
+```
+
+To examine assumptions, first we should check to see if the residuals are normal. There are statistical tests for this, but they don't always work well. Instead, try plotting a histogram of the residuals and seeing if it looks roughly normal (bell-shaped):
+
+```{r}
+hist(resid(trichome.lm))
+```
+
+This looks like a violation of normality. Recall that we log-transformed trichome density when visualizing data earlier. Let's try log-transforming for our model. Because some trichome density values equal zero, we need to use the `log1p` function, which takes the logarithm of one plus the data (so that zeros remains zeros), which typically works well for log-normal data.
+
+```{r}
+data$log_trichome <- log1p(data$trichome_density_number_per_cm2)
+trichome.lm2 <- lm(data$log_trichome ~ data$growth_form)
+summary(trichome.lm2)
+```
+
+Now let's check the residuals:
+
+```{r}
+hist(resid(trichome.lm2))
+```
+
+This looks better, at least. We can also use the `plot` function to look at other regression diagnostics.
+
+```{r}
+plot(trichome.lm2)
+TRUE
+TRUE
+TRUE
+TRUE
+```
+
+These diagnostic plots indicate that we have likely violated some assumptions of linear models and ANOVA, so these results should be interpreted with caution. Instead, we can perform a non-parametric test (Kruskal-Wallis), which performs ANOVA on the *ranked* data rather than the data itself:
+
+```{r}
+data$rank_trichome <- rank(data$trichome_density_number_per_cm2)
+trichome.lm3 <- lm(data$rank_trichome ~ data$growth_form)
+summary(trichome.lm3)
+hist(resid(trichome.lm3))
+plot(trichome.lm3)
+TRUE
+TRUE
+TRUE
+TRUE
+```
+
+Much better!
+
+## PROBLEM 1
+
+The `anscombe` data consists of 4 different datasets: (x1,y1), (x2,y2), (x3,y3), (x4,y4). The summary statistics of linear regression are IDENTICAL for each dataset, even though each dataset looks very different.
+
+### PROBLEM 1-A
+
+Visualize **each** anscombe dataset in the code chunks below. I have written the first line. Include the remaining three datasets (all in the same code chunk):
+
+```{r}
+plot(anscombe$x1,anscombe$y1,pch=19)
+
+```
+
+### PROBLEM 1-B
+
+Perform linear regression on each dataset using the `lm` function (see above examples). Name them mod1, mod2, mod3, and mod4, respectively. Then print their summary statistics to confim that all summary statistics are indeed identical.
+
+```{r}
+
+```
+
+### PROBLEM 1-C
+
+Visualize the distribution of the residuals using e.g. `hist(resid(mod1))`, and then plot other regression diagnostics using `plot(mod1)`. Remember to include `TRUE` for times after each time you plot a linear model (don't worry about why you have to include TRUE -- it's just a silly hack so RMarkdown will Knit the HTML file).
+
+```{r}
+
+```
+
+### PROBLEM 1-D
+
+The data from each dataset are clearly different. How can their summary statistics be the same? For each of the four datasets:
+- Say whether the assumptions of linear regression appear to be met or not
+- If there appear to be assumption violations, state the violations
+- Are the summary statistics trustworthy?
+
+##### mod1:
+
+##### mod2:
+
+##### mod3:
+
+##### mod4:
+
+
+
+## PROBLEM 2
+
+##### NOTE: Problem 2 is BONUS / OPTIONAL for undergraduate students
+
+The Mason et al. (2016) study consisted of 28 species, and each species was represented by 2-4 populations collected from across their natural geographic range. The total number of populations was 83. Each population had 8 replicate plants in the study, but the data we analyzed in this document did not include individual-level plant data. Instead, we have been working with the population-level averages today. In other words, we have been analyzing 83 data points (where each data point is the mean from a population), and these populations are nested within 28 different sunflower species.
+
+You already know that one of the assumptions of linear models is that data are supposed to independent, i.e. there shouldn't be clusters of non-indendence in the data. However, we analyzed these 83 populations as if they *were* independent. Is this a violation of assumptions, or are these populations indeed indpendent? (for this answer: ignore phylogeny and temporarily assume that the 28 species are all equally related -- i.e., that they all split off simultaneously from a single common ancestor).
+
+### PROBLEM 2-A
+
+If you think these populations are independent for the purposes of statistical modeling, justify your answer. If you think these populations are *not* independent, what do you think the consequences of this assumption violation could include? Is there any way to account for this nested structure of the data?
+
+### PROBLEM 2-B
+
+Let's shink the problem to make it easier to think about: suppose I have two populations of H. exilis, and three populations of H. niveus. Can assume that I have 5 independent populations?
+
+What if I have eight individuals (replicates) from a single population be considered independent?
+
+Would one individual from eight populations of the same species be independent?
+
+Would one individual from one population of 8 (equally related) species be considered independent?
+
+### PROBLEM 2-C
+
+For this question, *don't* ignore phylogeny -- i.e., consider phylogenetic relatedness. Suppose that we only have ONE data point per species, but some species are more closely related than others. Is it OK to treat this data as independent (for the purpose of linear models)?
+
+
+
+## PROBLEM 3
+
+Look at Table S1 on page 7 of the PDF file included in the data folder within Lab 3. The concentrations of these compounds are in `data` by their compound number. For example, #76 (the first row of Table S1) is located in `data$compound_76`. Note the compound identity (if any).
+
+Visualize (plot) the distribution of the concentration using a few of the example plots from the beginning of this document as template code. You are free to copy and paste from this document -- just be sure to update everything (variable names, etc) as needed. As was done above, visualize the distribution WITH and WITHOUT plotting by growth_form. If needed, perform log1p (etc) to normalize the data.
+
+```{r}
+
+```
+
+## PROBLEM 4
+
+### PROBLEM 4-A
+
+Find an additional trait from the dataset -- it can be another compound, or any other continuous trait from the dataset. Try to make sure it appears to be *correlated* with your compound from PROBLEM 3. Visualize the trait (like you did in PROBLEM 3).
+
+### PROBLEM 4-B
+
+Visualize the relationship between the two variables with a scatterplot using ggplot (use the code above as template code). Include a plot of the linear regression (by including `+ stat_sooth(method='lm')` to your ggplot code, as above).
+
+### PROBLEM 4-C
+
+Fit a linear model using the `lm` function, and examine the summary statistics.
+
+### PROBLEM 4-D
+
+Perform regression diagnostics (as above) by plotting a histogram of the residuals, and by plotting the regression object (remember to include four TRUE statements below that plot).
+
+### PROBLEM 4-E
+
+Do the assumptions of linear regression appear to be met? If not, what violation(s) do you observe?
+
+### PROBLEM 4-F
+
+Are there any data transformations you can perform to improve the assumptions being met? If so, do that below and rerun the model with the transformed data. If not, proceed to 4-G.
+
+### PROBLEM 4-G
+
+Now fit the data including data$growth_form, and examine the summary statistics. Then compare the model *with* and *without* growth_form using either a likelihood ratio test, AIC, and/or BIC (see above).
+
+### PROBLEM 4-H
+
+Which model seems to be best supported? Based on your best supported model, what can you conclude (if anything)? Are any model assumptions not met? Are you confident in the summary statistics (R^2, p-value)? Why or not?
